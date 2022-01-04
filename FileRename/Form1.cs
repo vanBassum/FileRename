@@ -174,7 +174,12 @@ namespace FileRename
                         {
                             Match m = Regex.Match(files.Current, filter);
                             if (m.Success)
-                                this.InvokeIfRequired(() => items.Add(new ChangeItem(files.Current, m)));
+                            {
+                                var ci = new ChangeItem(files.Current, m);
+                                FileAttributes attributes = File.GetAttributes(ci.Source);
+                                FileInfo fi = new FileInfo(ci.Source);
+                                this.InvokeIfRequired(() => items.Add(ci));
+                            }
 
                             delay = false;
                         }

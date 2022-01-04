@@ -62,12 +62,12 @@ namespace FileRename
             this.listBox1.ItemHeight = 15;
             this.listBox1.Location = new System.Drawing.Point(261, 41);
             this.listBox1.Name = "listBox1";
-            this.listBox1.Size = new System.Drawing.Size(633, 516);
+            this.listBox1.Size = new System.Drawing.Size(435, 516);
             this.listBox1.TabIndex = 2;
             // 
             // button1
             // 
-            this.button1.Location = new System.Drawing.Point(510, 12);
+            this.button1.Location = new System.Drawing.Point(621, 10);
             this.button1.Name = "button1";
             this.button1.Size = new System.Drawing.Size(75, 23);
             this.button1.TabIndex = 3;
@@ -90,7 +90,7 @@ namespace FileRename
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(906, 569);
+            this.ClientSize = new System.Drawing.Size(704, 569);
             this.Controls.Add(this.richTextBox1);
             this.Controls.Add(this.button1);
             this.Controls.Add(this.listBox1);
