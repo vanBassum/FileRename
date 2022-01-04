@@ -1,10 +1,10 @@
 ﻿namespace FileRename
 {
-    public class FilterChangedEvent : IEvent
-    { 
+    public class RenameAction : IEvent
+    {
         public string Value { get; set; }
 
-        public FilterChangedEvent(string value)
+        public RenameAction(string value)
         {
             Value = value;
         }

@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Text.RegularExpressions;
+using System.Windows.Forms.VisualStyles;
 
 namespace FileRename
 {
@@ -49,7 +50,7 @@ namespace FileRename
                     e.Graphics.DrawString("SRC",
                         font, Brushes.Black, e.Bounds.X, e.Bounds.Y);
 
-                    e.Graphics.DrawString(item.Source.FullName,
+                    e.Graphics.DrawString(item.Source,
                         font, Brushes.Black, e.Bounds.X + 30, e.Bounds.Y);
 
                     e.Graphics.DrawString("DST",
@@ -57,11 +58,17 @@ namespace FileRename
 
                     if (item.Destination != null)
                     {
-                        e.Graphics.DrawString(item.Destination.FullName,
+                        e.Graphics.DrawString(item.Destination,
                             font, Brushes.Black, e.Bounds.X + 30, e.Bounds.Y + 15);
                     }
+
+                    CheckBoxRenderer.DrawCheckBox(e.Graphics,
+                                                    new Point(e.Bounds.X + e.Bounds.Width - 50, e.Bounds.Y + 7),
+                                                    item.Moved ? CheckBoxState.CheckedNormal : CheckBoxState.UncheckedNormal);
+
+
                 }
-                
+
                 // Draw the focus rectangle around the selected item.
                 e.DrawFocusRectangle();
             }
@@ -78,87 +85,52 @@ namespace FileRename
 
         private void textBox1_TextChanged(object sender, EventArgs e)
         {
-            if (sender is TextBox tb)
+           
+            if (IsValidRegexPattern(textBox1.Text))
             {
-                if (IsValidRegexPattern(tb.Text))
-                {
-                    tb.BackColor = Color.White;
-                    work.Enqueue(new FilterChangedEvent(tb.Text));
-                }
-                else
-                    tb.BackColor = Color.IndianRed;
+                textBox1.BackColor = Color.White;
+                work.Enqueue(new FilterAction(textBox1.Text, richTextBox1.Text));
             }
+            else
+                textBox1.BackColor = Color.IndianRed;
+            
+        }
+
+        private void richTextBox1_TextChanged(object sender, EventArgs e)
+        {
+            textBox1_TextChanged(null, null);
         }
 
         private void textBox2_TextChanged(object sender, EventArgs e)
         {
             if (sender is TextBox tb)
             {
-                work.Enqueue(new DestinationChangedEvent(tb.Text));
+                work.Enqueue(new RenameAction(tb.Text));
             }
         }
 
-
-        void Rename(ChangeItem changeItem, string format)
+        private void button1_Click(object sender, EventArgs e)
         {
-            string result = "";
-            do
-            {
-                if (format[0] == '\\')
-                {
-                    format = format.Substring(1);
-                    Match m;
+            textBox1.Enabled = false;
+            textBox2.Enabled = false;
+            listBox1.Enabled = false;
+            button1.Enabled = false;
 
-                    if (format.Length > 0)
-                    {
-                        if (format[0] == '\\')
-                        {
-                            result += "\\";
-                            format = format.Substring(1);
-                        }
-                        else if((m = Regex.Match(format, "\\d+")).Success)
-                        {
-                            if(int.TryParse(m.Value, out int groupNo))
-                            {
-                                if(groupNo < changeItem.Match.Groups.Count)
-                                {
-                                    result += changeItem.Match.Groups[groupNo].Value;
-                                }
-                            }
-                            format = format.Substring(m.Length);
-                        }
-                        else
-                        {
-                            //invalid escape character
-                        }
-                    }
-                }
-                else
-                {
-                    int ind = format.IndexOf('\\');
-                    if(ind < 0)
-                    {
-                        result += format;
-                        format = "";
-                    }
-                    else
-                    {
-                        result += format.Substring(0, ind + 1);
-                        format = format.Substring(ind);
-                    }
-                }
-
-            }
-            while (format.Length > 0);
-
-            changeItem.Destination = new FileInfo(result);
+            work.Enqueue(new MoveAction(()=> {
+                textBox1.Enabled = true;
+                textBox2.Enabled = true;
+                listBox1.Enabled = true;
+                button1.Enabled =  true;
+            }));
         }
 
 
         void Work()
         {
             IEnumerator<string> files = null;
-            IEnumerator<ChangeItem> change = null;
+            IEnumerator<ChangeItem> rename = null;
+            IEnumerator<ChangeItem> move = null;
+            Action renameDoneCallback = null;
             string filter = "*";
             string format = "";
             bool delay = true;
@@ -167,52 +139,102 @@ namespace FileRename
             {
                 if (work.TryDequeue(out IEvent ev))
                 {
+
                     switch (ev)
                     {
-                        case FilterChangedEvent filterEvent:
+                        case FilterAction filterEvent:
                             this.InvokeIfRequired(() => items.Clear());
                             filter = filterEvent.Value;
                             files = Directory.EnumerateFiles(@"C:\Users\Bas\Desktop\TEST", "*", SearchOption.AllDirectories).GetEnumerator();
+                            if (rename != null)
+                                rename = items.GetEnumerator();
                             break;
 
-                        case DestinationChangedEvent destinationChangedEvent:
-                            change = items.GetEnumerator();
+                        case RenameAction destinationChangedEvent:
                             format = destinationChangedEvent.Value;
+                            rename = items.GetEnumerator();
+                            break;
+
+                        case MoveAction startRenameEvent:
+                            renameDoneCallback = startRenameEvent.FinishedCallback;
+                            move = items.GetEnumerator();
                             break;
 
                     }
                     delay = false;
                 }
 
+
+
                 if (files != null)
                 {
-                    if(files.MoveNext())
+                    try
                     {
-                        Match m = Regex.Match(files.Current, filter);
-                        if(m.Success)
-                            this.InvokeIfRequired(() => items.Add(new ChangeItem(files.Current, m)));
+                        if (files.MoveNext())
+                        {
+                            Match m = Regex.Match(files.Current, filter);
+                            if (m.Success)
+                                this.InvokeIfRequired(() => items.Add(new ChangeItem(files.Current, m)));
 
-                        delay = false;
+                            delay = false;
+                        }
                     }
+                    catch (InvalidOperationException ex)
+                    {
+                        
+                    }
+                    catch { }
                 }
 
-                if (change != null)
+                if (rename != null)
                 {
-                    if (change.MoveNext())
+                    try
                     {
-                        try
+                        if (rename.MoveNext())
                         {
-                            this.InvokeIfRequired(() => {
-                                Rename(change.Current, format);
+                            this.InvokeIfRequired(() =>
+                            {
+                                Rename(rename.Current, format);
                                 listBox1.Refresh();
                             });
                         }
-                        catch
-                        {
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        rename = items.GetEnumerator();
+                    }
+                    catch { }
+                }
 
+                if (move != null)
+                {
+                    try
+                    {
+                        
+                        if (move.MoveNext())
+                        {
+                            MoveFile(move.Current);
+                            this.InvokeIfRequired(() =>
+                            {
+                                listBox1.Refresh();
+                            });
+                        }
+                        else
+                        {
+                            if(renameDoneCallback != null)
+                            {
+                                this.InvokeIfRequired(()=>renameDoneCallback());
+                                renameDoneCallback = null;
+                            }
                         }
                     }
+                    catch (InvalidOperationException ex)
+                    {
+                        
+                    }
+                    catch { }
                 }
+
 
                 if (delay)
                     Thread.Sleep(100);
@@ -230,6 +252,91 @@ namespace FileRename
             }
             catch { return false; } //ArgumentException or RegexMatchTimeoutException
             return true;
+        }
+
+        
+
+
+        void MoveFile(ChangeItem changeItem)
+        {
+            string dir = Path.GetDirectoryName(changeItem.Destination);
+            Directory.CreateDirectory(dir);
+            File.Move(changeItem.Source, changeItem.Destination);
+            changeItem.Moved = true;
+        }
+
+        void Rename(ChangeItem changeItem, string format)
+        {
+            string result = format;
+            Match m;
+
+            while((m = Regex.Match(result, @"{(\d+)}")).Success)
+            {
+                int groupNo = int.Parse(m.Groups[1].Value);
+                string buf = result.Substring(0, m.Index);
+                buf += changeItem.Match.Groups[groupNo+1].Value;
+                buf += result.Substring(m.Index + m.Length);
+                result = buf;
+            }
+
+            changeItem.Destination = result;
+        }
+
+
+
+        void RenameOld(ChangeItem changeItem, string format)
+        {
+            string result = "";
+            do
+            {
+                if (format[0] == '\\')
+                {
+                    format = format.Substring(1);
+                    Match m;
+
+                    if (format.Length > 0)
+                    {
+                        if (format[0] == '\\')
+                        {
+                            result += "\\";
+                            format = format.Substring(1);
+                        }
+                        else if ((m = Regex.Match(format, "\\d+")).Success)
+                        {
+                            if (int.TryParse(m.Value, out int groupNo))
+                            {
+                                if (groupNo < changeItem.Match.Groups.Count)
+                                {
+                                    result += changeItem.Match.Groups[groupNo].Value;
+                                }
+                            }
+                            format = format.Substring(m.Length);
+                        }
+                        else
+                        {
+                            //invalid escape character
+                        }
+                    }
+                }
+                else
+                {
+                    int ind = format.IndexOf('\\');
+                    if (ind < 0)
+                    {
+                        result += format;
+                        format = "";
+                    }
+                    else
+                    {
+                        result += format.Substring(0, ind + 1);
+                        format = format.Substring(ind);
+                    }
+                }
+
+            }
+            while (format.Length > 0);
+
+            changeItem.Destination = result;
         }
 
         
